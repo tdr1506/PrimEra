@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wireshark: IP Location Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
+        integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+        crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"
+        integrity="sha512-BBToHPBStgMiw0lD4AtkRIZmdndhB6aQbXpX7omcrXeG2PauGBl2lzq2xUZTxaLxYz5IDHlmneCZ1IJ+P3kYtQ=="
+        crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"
+        integrity="sha512-RLEjtaFGdC4iQMJDbMzim/dOvAu+8Qp9sw7QE4wIMYcg2goVoivzwgSZq9CsIxp4xKAZPKh5J2f2lOko2Ze6FQ=="
+        crossorigin="">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        #map {
+            height: 100%;
+        }
+        .file-picker-enabled #map,
+        #file-picker-container {
+            display: none;
+        }
+        .file-picker-enabled #file-picker-container {
+            display: block;
+            margin: 2em;
+        }
+        .range-control {
+            padding: 3px 5px;
+            color: #333;
+            background: #fff;
+            opacity: .5;
+        }
+        .range-control:hover {
+            opacity: 1;
+        }
+        .range-control-label {
+            padding-right: 3px;
+        }
+        .range-control-input {
+            padding: 0;
+            width: 130px;
+        }
+        .range-control-input,
+        .range-control-label {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div id="file-picker-container">
+        <label>Select an ipmap.html or GeoJSON .json file as created by Wireshark.<br>
+            <input type="file" id="file-picker" accept=".json,.html"></label>
+        <p id="error-message"></p>
+    </div>
+    <div id="map"></div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"
+        integrity="sha512-QVftwZFqvtRNi0ZyCtsznlKSWOStnDORoefr1enyq5mVL4tmKB3S/EnC3rRJcxCPavG10IcrVGSmPh6Qw5lwrg=="
+        crossorigin=""></script>
+    <!-- Leaflet MarkerCluster JavaScript -->
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"
+        integrity="sha512-MQlyPV+ol2lp4KodaU/Xmrn+txc1TP15pOBF/2Sfre7MRsA/pB4Vy58bEqe9u7a7DczMLtU5wT8n7OblJepKbg=="
+        crossorigin=""></script>
+    <script>
+        var map;
+
+        function loadGeoJSON(obj) {
+            'use strict';
+            if (map) map.remove();
+            map = L.map('map');
+            var tileServer = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+            L.tileLayer(tileServer, {
+                minZoom: 2,
+                maxZoom: 16,
+                subdomains: 'abcd',
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            }).addTo(map);
+            L.control.scale().addTo(map);
+
+            var geoJson = L.geoJSON(obj, {
+                pointToLayer: function (feature, latlng) {
+                    return L.circle(latlng, { radius: feature.properties.radius || 1000 }); // Default radius 1000 if not provided
+                },
+                onEachFeature: function (feature, layer) {
+                    var props = feature.properties;
+                    var title = props.ip || 'Unknown IP';
+                    var popupContent = '<b>' + title + '</b><br>';
+                    for (var key in props) {
+                        if (key !== 'ip' && key !== 'radius') {
+                            popupContent += key + ': ' + props[key] + '<br>';
+                        }
+                    }
+                    layer.bindPopup(popupContent);
+                }
+            }).addTo(map);
+
+            map.fitBounds(geoJson.getBounds());
+        }
+
+        function showError(msg) {
+            document.getElementById('error-message').textContent = msg;
+            document.body.classList.add('file-picker-enabled');
+        }
+
+        function loadData(data) {
+            'use strict';
+            // Function to load GeoJSON data and display on map
+            try {
+                loadGeoJSON(JSON.parse(data));
+            } catch (e) {
+                showError('Error loading GeoJSON data: ' + e.message);
+            }
+        }
+
+        // Event listener for file picker
+        document.getElementById('file-picker').addEventListener('change', function () {
+            var file = this.files[0];
+            var reader = new FileReader();
+            reader.onload = function () {
+                loadData(reader.result);
+            };
+            reader.onerror = function () {
+                showError('Error reading file.');
+            };
+            reader.readAsText(file);
+        });
+
+        // Initial loading of GeoJSON data if provided in the script tag
+        var scriptData = document.getElementById('ipmap-data');
+        if (scriptData) {
+            loadData(scriptData.textContent);
+        }
+    </script>
+</body>
+</html>
